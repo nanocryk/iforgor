@@ -1,0 +1,9 @@
+[[entries]]
+name = "APT: Update packages"
+script = "sudo apt update && sudo apt upgrade"
+
+[[entries]]
+name = "iforgor: Install from current dir"
+script = """
+cargo install --path .
+"""
