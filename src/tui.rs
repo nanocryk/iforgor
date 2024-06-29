@@ -32,7 +32,7 @@ pub fn restore() -> io::Result<()> {
     Ok(())
 }
 
-pub fn tui_choose_in_list<'t, T: Display + Clone>(
+pub fn tui_choose_in_list<'t, T: Display + Clone + Ord>(
     list: &'t [T],
     history: &'t [T],
 ) -> anyhow::Result<Option<&'t T>> {
@@ -59,7 +59,7 @@ struct ListSearch<'t, T: Display> {
     search_input: String,
 }
 
-impl<'t, T: Display + Clone> ListSearch<'t, T> {
+impl<'t, T: Display + Clone + Ord> ListSearch<'t, T> {
     pub fn new(list: &'t [T], history: &'t [T]) -> Self {
         let mut list_state = ListState::default();
         list_state.select(Some(0));
@@ -113,7 +113,7 @@ impl<'t, T: Display + Clone> ListSearch<'t, T> {
         if self.search_input.is_empty() {
             self.displayed_list = self.history.iter().collect();
         } else {
-            let filtered_list: Vec<_> = {
+            let mut filtered_list: Vec<_> = {
                 let search = self.search_input.to_lowercase();
                 let search: Vec<_> = search.split(",").map(|s| s.trim()).collect();
                 self.list
@@ -121,6 +121,8 @@ impl<'t, T: Display + Clone> ListSearch<'t, T> {
                     .filter(|item| search_filter(&item.to_string(), &search))
                     .collect()
             };
+
+            filtered_list.sort();
 
             self.displayed_list = filtered_list;
         }

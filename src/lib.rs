@@ -43,16 +43,30 @@ pub struct Cli {
 
 #[derive(clap::Subcommand, Debug)]
 pub enum CliCommands {
-    /// Add a source
-    AddSource { path: PathBuf },
+    /// Source subcommands
+    Source {
+        #[command(subcommand)]
+        inner: SourceCommands,
+    },
     /// Reload commands from sources.
     Reload,
 }
 
-#[derive(Debug, Clone)]
+#[derive(clap::Subcommand, Debug)]
+pub enum SourceCommands {
+    /// Add a source
+    Add { path: PathBuf },
+    /// List all sources
+    List,
+    /// Remove a source
+    Remove { path: PathBuf },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct IdAndName {
-    pub id: CommandId,
+    // order by name first
     pub name: String,
+    pub id: CommandId,
 }
 
 impl Display for IdAndName {
@@ -130,13 +144,37 @@ impl Cli {
         };
 
         match command {
-            CliCommands::AddSource { path } => {
+            CliCommands::Source {
+                inner: SourceCommands::Add { path },
+            } => {
                 let path = std::fs::canonicalize(path)?;
                 println!("Adding source \"{}\"", path.display());
 
                 load_scripts_for_source(&mut registry.commands, path.clone())?;
 
                 registry.sources.insert(path);
+            }
+            CliCommands::Source {
+                inner: SourceCommands::List,
+            } => {
+                for source in &registry.sources {
+                    println!("- {}", source.display());
+                }
+            }
+            CliCommands::Source {
+                inner: SourceCommands::Remove { path },
+            } => {
+                let path = std::fs::canonicalize(path)?;
+
+                if !registry.sources.remove(&path) {
+                    bail!("Path was not a registered source");
+                }
+
+                println!("Removed source \"{}\"", path.display());
+                println!(
+                    "Commands in that source are still registred. Run \
+                `iforgor reload` to reload commands from remaining sources only"
+                );
             }
             CliCommands::Reload => {
                 let mut commands = BTreeMap::new();
