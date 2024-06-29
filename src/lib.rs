@@ -29,6 +29,11 @@ pub struct Cli {
     #[arg(long)]
     cleanup_registry: bool,
 
+    /// Cleanup the history of ran commands.
+    #[arg(long)]
+    purge_history: bool,
+
+    /// Display the registry path.
     #[arg(long)]
     registry_path: bool,
 
@@ -38,23 +43,9 @@ pub struct Cli {
 
 #[derive(clap::Subcommand, Debug)]
 pub enum CliCommands {
-    /// (DEBUG) Run command with given ID
-    RunId { id: String },
-    /// [short: s] Run command based on name search.
-    /// Provides a list of commands matching the search, which you can then choose amongst
-    /// using the provided number.
-    #[command(alias = "s")]
-    Search { search: Vec<String> },
-    /// [short: h] List last run commands and allow to rerun them.
-    #[command(alias = "h")]
-    History {
-        #[arg(long)]
-        purge: bool,
-    },
     /// Add a source
     AddSource { path: PathBuf },
-    /// [short: r] Reload commands from sources.
-    #[command(alias = "r")]
+    /// Reload commands from sources.
     Reload,
 }
 
@@ -78,6 +69,7 @@ impl Cli {
 
         if self.registry_path {
             println!("Registry path: {}", registry_path.display());
+            return Ok(());
         }
 
         let mut registry = if self.cleanup_registry {
@@ -88,6 +80,13 @@ impl Cli {
         } else {
             OnDisk::<CommandsRegistry>::open_or_default(registry_path)?
         };
+
+        if self.purge_history {
+            registry.history = Vec::new();
+            registry.save()?;
+            println!("🗑️ Purged history!");
+            return Ok(());
+        }
 
         let Some(command) = self.command else {
             loop {
@@ -131,34 +130,6 @@ impl Cli {
         };
 
         match command {
-            CliCommands::RunId { id } => {
-                registry.run_script_by_id(&id)?;
-            }
-            CliCommands::Search { search } => {
-                let search: Vec<_> = search.into_iter().map(|s| s.to_lowercase()).collect();
-
-                let commands: Vec<_> = registry
-                    .commands
-                    .iter()
-                    .filter_map(|(id, command)| {
-                        if search_filter(&command, &search) {
-                            Some(IdAndName {
-                                id: id.clone(),
-                                name: command.name().to_string(),
-                            })
-                        } else {
-                            None
-                        }
-                    })
-                    .take(10)
-                    .collect();
-
-                let Some(IdAndName { id, .. }) = choose_in_list(&commands)? else {
-                    return Ok(());
-                };
-
-                registry.run_script_by_id(&id)?;
-            }
             CliCommands::AddSource { path } => {
                 let path = std::fs::canonicalize(path)?;
                 println!("Adding source \"{}\"", path.display());
@@ -166,32 +137,6 @@ impl Cli {
                 load_scripts_for_source(&mut registry.commands, path.clone())?;
 
                 registry.sources.insert(path);
-            }
-            CliCommands::History { purge } => {
-                if purge {
-                    registry.history = Vec::new();
-                    registry.save()?;
-                    println!("Purged history!");
-                    return Ok(());
-                }
-
-                let history: Vec<_> = registry
-                    .history
-                    .iter()
-                    .filter_map(|id| registry.commands.get(id).map(|c| (id, c)))
-                    .map(|(id, c)| IdAndName {
-                        id: id.clone(),
-                        name: c.name().to_string(),
-                    })
-                    .collect();
-
-                let history: Vec<_> = history.into_iter().rev().collect();
-
-                let Some(IdAndName { id, .. }) = choose_in_list(&history)? else {
-                    return Ok(());
-                };
-
-                registry.run_script_by_id(&id)?;
             }
             CliCommands::Reload => {
                 let mut commands = BTreeMap::new();
@@ -210,35 +155,6 @@ impl Cli {
     }
 }
 
-fn choose_in_list<T: Display>(list: &[T]) -> anyhow::Result<Option<&T>> {
-    if list.is_empty() {
-        bail!("List is empty");
-    }
-
-    for (i, item) in list.iter().enumerate() {
-        println!("{i}. {item}");
-    }
-
-    print!("Selection (a/q to abort): ");
-    std::io::stdout().flush()?;
-
-    let mut line = String::new();
-    std::io::stdin().read_line(&mut line)?;
-
-    let line = line.trim();
-    if line == "a" || line == "q" {
-        return Ok(None);
-    }
-
-    let choice: u8 = line.parse()?;
-
-    let Some(item) = list.get(choice as usize) else {
-        bail!("Out of bound index");
-    };
-
-    Ok(Some(item))
-}
-
 fn load_scripts_for_source(
     commands: &mut BTreeMap<CommandId, Command>,
     path: PathBuf,
@@ -253,17 +169,6 @@ fn load_scripts_for_source(
     }
 
     Ok(())
-}
-
-fn search_filter(command: &Command, search: &[String]) -> bool {
-    let command_name_lower = command.name().to_lowercase();
-    for word in search {
-        if !command_name_lower.contains(word) {
-            return false;
-        }
-    }
-
-    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

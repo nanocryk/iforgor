@@ -11,7 +11,7 @@ use {
         symbols::border,
         widgets::{
             block::{Position, Title},
-            Block, List, ListState, Padding,
+            Block, List, ListState, Padding, Paragraph, Wrap,
         },
     },
     std::{fmt::Display, io},
@@ -109,6 +109,23 @@ impl<'t, T: Display + Clone> ListSearch<'t, T> {
         Ok(())
     }
 
+    fn update_list(&mut self) {
+        if self.search_input.is_empty() {
+            self.displayed_list = self.history.iter().collect();
+        } else {
+            let filtered_list: Vec<_> = {
+                let search = self.search_input.to_lowercase();
+                let search: Vec<_> = search.split(",").map(|s| s.trim()).collect();
+                self.list
+                    .iter()
+                    .filter(|item| search_filter(&item.to_string(), &search))
+                    .collect()
+            };
+
+            self.displayed_list = filtered_list;
+        }
+    }
+
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         match key_event.code {
             KeyCode::Esc => self.status = Status::Exit,
@@ -116,25 +133,12 @@ impl<'t, T: Display + Clone> ListSearch<'t, T> {
             KeyCode::Char(c) => {
                 self.search_input.push(c);
                 self.list_state.select(Some(0));
-
-                if self.search_input.is_empty() {
-                    self.displayed_list = self.history.iter().collect();
-                } else {
-                    let filtered_list: Vec<_> = {
-                        let search = self.search_input.to_lowercase();
-                        let search: Vec<_> = search.split(",").map(|s| s.trim()).collect();
-                        self.list
-                            .iter()
-                            .filter(|item| search_filter(&item.to_string(), &search))
-                            .collect()
-                    };
-
-                    self.displayed_list = filtered_list;
-                }
+                self.update_list();
             }
             KeyCode::Backspace => {
                 self.search_input.pop();
                 self.list_state.select(Some(0));
+                self.update_list();
             }
             KeyCode::Up => {
                 self.list_state.select_previous();
@@ -171,13 +175,15 @@ impl<'t, T: Display + Clone> Widget for &mut ListSearch<'t, T> {
             .padding(Padding::horizontal(1));
 
         // Box content layout
-        let [search_bar, _padding, list_area] = Layout::default()
+        let [search_bar, _padding1, list_area, _padding2, extra_text] = Layout::default()
             .direction(Direction::Vertical)
             .constraints(
                 [
                     Constraint::Length(1),
                     Constraint::Length(1),
-                    Constraint::Min(5),
+                    Constraint::Min(3),
+                    Constraint::Length(1),
+                    Constraint::Max(5),
                 ]
                 .into_iter(),
             )
@@ -191,23 +197,19 @@ impl<'t, T: Display + Clone> Widget for &mut ListSearch<'t, T> {
         // Render search bar
         Line::from("Search :").render(search_label, buf);
 
-        let filtered_list: Vec<_> = {
-            let search = self.search_input.to_lowercase();
-            let search: Vec<_> = search.split(",").map(|s| s.trim()).collect();
-            self.list
-                .iter()
-                .filter(|item| search_filter(&item.to_string(), &search))
-                .cloned()
-                .collect()
-        };
+        // Render list
 
-        let (search_input, list) = if self.search_input.is_empty() {
-            (" ", self.history)
+        let search_input = if self.search_input.is_empty() {
+            " "
         } else {
-            (self.search_input.as_str(), filtered_list.as_slice())
+            self.search_input.as_str()
         };
 
-        let list: Vec<_> = list.iter().map(|item| item.to_string()).collect();
+        let list: Vec<_> = self
+            .displayed_list
+            .iter()
+            .map(|item| item.to_string())
+            .collect();
 
         Line::from(search_input)
             .style(Style::new().bg(Color::White).fg(Color::Black))
@@ -215,6 +217,17 @@ impl<'t, T: Display + Clone> Widget for &mut ListSearch<'t, T> {
 
         let list = List::new(list).highlight_symbol("> ");
         StatefulWidget::render(&list, list_area, buf, &mut self.list_state);
+
+        // Render extra text
+        Paragraph::new(
+            "Run `iforgor help` to learn about subcommands. \
+            Search for multiple search terms by separating them with commas `,` \
+            Empty search displays history, type anything (including spaces) to \
+            display the filtered full list of commands.",
+        )
+        .wrap(Wrap { trim: true })
+        .style(Style::new().fg(Color::Cyan))
+        .render(extra_text, buf);
 
         // Render outer border
         block.render(area, buf);
