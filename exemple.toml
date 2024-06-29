@@ -15,4 +15,5 @@ script = "sudo apt update && sudo apt upgrade"
 name = "[Exemple] Install iforgor from current dir"
 script = """
 cargo install --path .
+echo You should restart iforgor to use up-to-date binary.
 """

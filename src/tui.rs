@@ -11,7 +11,7 @@ use {
         symbols::border,
         widgets::{
             block::{Position, Title},
-            Block, List, ListState, Padding, Paragraph, Wrap,
+            Block, HighlightSpacing, List, ListState, Padding, Paragraph, Wrap,
         },
     },
     std::{fmt::Display, io},
@@ -86,7 +86,7 @@ impl<'t, T: Display + Clone + Ord> ListSearch<'t, T> {
                         .list_state
                         .selected()
                         .and_then(|index| self.displayed_list.get(index))
-                        .map(|item| *item))
+                        .copied())
                 }
                 Status::Continue => (),
             }
@@ -118,7 +118,7 @@ impl<'t, T: Display + Clone + Ord> ListSearch<'t, T> {
         } else {
             let mut filtered_list: Vec<_> = {
                 let search = self.search_input.to_lowercase();
-                let search: Vec<_> = search.split(",").map(|s| s.trim()).collect();
+                let search: Vec<_> = search.split(',').map(|s| s.trim()).collect();
                 self.list
                     .iter()
                     .filter(|item| search_filter(&item.to_string(), &search))
@@ -159,7 +159,7 @@ impl<'t, T: Display + Clone + Ord> ListSearch<'t, T> {
 impl<'t, T: Display + Clone> Widget for &mut ListSearch<'t, T> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         // Outer border
-        let title = Title::from(" iforgor ".bold());
+        let title = Title::from(" iforgor ".bold().magenta());
 
         let instructions = Title::from(Line::from(vec![
             " Select item ".into(),
@@ -182,21 +182,18 @@ impl<'t, T: Display + Clone> Widget for &mut ListSearch<'t, T> {
         // Box content layout
         let [search_bar, _padding1, list_area, _padding2, extra_text] = Layout::default()
             .direction(Direction::Vertical)
-            .constraints(
-                [
-                    Constraint::Length(1),
-                    Constraint::Length(1),
-                    Constraint::Min(3),
-                    Constraint::Length(1),
-                    Constraint::Max(5),
-                ]
-                .into_iter(),
-            )
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Min(3),
+                Constraint::Length(1),
+                Constraint::Max(5),
+            ])
             .areas(block.inner(area));
 
         let [search_label, search_area] = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(9), Constraint::Min(10)].into_iter())
+            .constraints([Constraint::Length(9), Constraint::Min(10)])
             .areas(search_bar);
 
         // Render search bar
@@ -217,10 +214,14 @@ impl<'t, T: Display + Clone> Widget for &mut ListSearch<'t, T> {
             .collect();
 
         Line::from(search_input)
-            .style(Style::new().bg(Color::White).fg(Color::Black))
+            .style(Style::new().underlined())
             .render(search_area, buf);
 
-        let list = List::new(list).highlight_symbol("> ");
+        let list = List::new(list)
+            .highlight_style(Style::new().bold().blue())
+            .highlight_symbol("> ")
+            .highlight_spacing(HighlightSpacing::Always)
+            .scroll_padding(1);
         StatefulWidget::render(&list, list_area, buf, &mut self.list_state);
 
         // Render extra text
@@ -231,7 +232,7 @@ impl<'t, T: Display + Clone> Widget for &mut ListSearch<'t, T> {
             display the filtered full list of commands.",
         )
         .wrap(Wrap { trim: true })
-        .style(Style::new().fg(Color::Cyan))
+        .style(Style::new().cyan().italic())
         .render(extra_text, buf);
 
         // Render outer border

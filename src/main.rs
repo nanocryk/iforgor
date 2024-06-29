@@ -6,7 +6,7 @@ fn main() -> anyhow::Result<()> {
         // subcommand and not iforgor
     })
     .expect("Error setting Ctrl-C handler");
-    
+
     let cli = Cli::parse();
     cli.run()
 }

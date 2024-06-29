@@ -64,7 +64,7 @@ impl<T: Serialize + DeserializeOwned + Default> OnDisk<T> {
             .path
             .parent()
             .ok_or(anyhow!("expected file to be in a folder"))?;
-        std::fs::create_dir_all(&folder)?;
+        std::fs::create_dir_all(folder)?;
 
         let mut file = File::create(&self.path)?;
         let content = toml::to_string(&self.inner)?;

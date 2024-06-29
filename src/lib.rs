@@ -245,7 +245,7 @@ impl CommandsRegistry {
 
         println!("💭 Running \"{name}\"\n");
 
-        execute_script(&script, &args_values)?;
+        execute_script(script, &args_values)?;
 
         Ok(())
     }
