@@ -63,14 +63,17 @@ impl<'t, T: Display + Clone + Ord> ListSearch<'t, T> {
     pub fn new(list: &'t [T], history: &'t [T]) -> Self {
         let mut list_state = ListState::default();
         list_state.select(Some(0));
-        Self {
+
+        let mut s = Self {
             list,
             history,
-            displayed_list: history.iter().collect(),
+            displayed_list: Vec::new(),
             list_state,
             status: Status::Continue,
             search_input: String::new(),
-        }
+        };
+        s.update_list();
+        s
     }
 
     /// runs the application's main loop until the user quits
@@ -110,7 +113,7 @@ impl<'t, T: Display + Clone + Ord> ListSearch<'t, T> {
     }
 
     fn update_list(&mut self) {
-        if self.search_input.is_empty() {
+        if self.search_input.is_empty() && !self.history.is_empty() {
             self.displayed_list = self.history.iter().collect();
         } else {
             let mut filtered_list: Vec<_> = {

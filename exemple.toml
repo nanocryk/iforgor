@@ -1,13 +1,18 @@
 [[entries]]
-name = "iforgor: Hello, world!"
+name = "[Exemple] Hello, world!"
 script = "echo Hello, world!"
 
 [[entries]]
-name = "APT: Update packages"
+name = "[Exemple] Echo argument"
+script = "echo $1"
+args = ["Text to print"]
+
+[[entries]]
+name = "[APT] Update packages"
 script = "sudo apt update && sudo apt upgrade"
 
 [[entries]]
-name = "iforgor: Install from current dir"
+name = "[Exemple] Install iforgor from current dir"
 script = """
 cargo install --path .
 """

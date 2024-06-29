@@ -109,7 +109,7 @@ impl Cli {
                     .iter()
                     .map(|(id, command)| IdAndName {
                         id: id.clone(),
-                        name: command.name().to_string(),
+                        name: command.name.to_string(),
                     })
                     .collect();
 
@@ -119,7 +119,7 @@ impl Cli {
                     .filter_map(|id| registry.commands.get(id).map(|c| (id, c)))
                     .map(|(id, c)| IdAndName {
                         id: id.clone(),
-                        name: c.name().to_string(),
+                        name: c.name.to_string(),
                     })
                     .collect();
 
@@ -194,7 +194,7 @@ impl Cli {
 }
 
 fn load_scripts_for_source(
-    commands: &mut BTreeMap<CommandId, Command>,
+    commands: &mut BTreeMap<CommandId, UserCommand>,
     path: PathBuf,
 ) -> anyhow::Result<()> {
     println!("Loading source: {}", path.display());
@@ -203,7 +203,7 @@ fn load_scripts_for_source(
     for script in scripts.entries {
         let id = script.generate_id();
         println!("- Added command: {}", script.name);
-        commands.insert(id, Command::UserCommand(script));
+        commands.insert(id, script);
     }
 
     Ok(())
@@ -213,7 +213,7 @@ fn load_scripts_for_source(
 pub struct CommandsRegistry {
     pub history: Vec<CommandId>,
     pub sources: BTreeSet<PathBuf>,
-    pub commands: BTreeMap<CommandId, Command>,
+    pub commands: BTreeMap<CommandId, UserCommand>,
 }
 
 impl CommandsRegistry {
@@ -222,6 +222,8 @@ impl CommandsRegistry {
             bail!("Unknown command ID {id}")
         };
 
+        
+
         // Update history before running the script in case it fails.
         let mut history = Vec::new();
         std::mem::swap(&mut self.history, &mut history);
@@ -229,12 +231,23 @@ impl CommandsRegistry {
         self.history = history.into_iter().filter(|hid| hid != id).collect();
         self.history.push(id.clone());
 
-        match entry {
-            Command::UserCommand(UserCommand { name, script }) => {
-                println!("💭 Running \"{name}\"\n");
-                execute_script(&script)?;
-            }
+        let UserCommand { name, script, args } = entry;
+
+        let mut args_values = Vec::new();
+        if !args.is_empty() {
+            println!("This script requires the following arguments:")
         }
+        for arg in args  {
+            let mut buf = String::new();
+            print!("- {arg}: ");
+            std::io::stdout().flush()?;
+            std::io::stdin().read_line(&mut buf)?;
+            args_values.push(buf);
+        }
+
+        println!("💭 Running \"{name}\"\n");
+
+        execute_script(&script, &args_values)?;
 
         Ok(())
     }
@@ -243,20 +256,6 @@ impl CommandsRegistry {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CommandsSource {
     pub entries: Vec<UserCommand>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Command {
-    // SystemCommand(SystemCommand),
-    UserCommand(UserCommand),
-}
-
-impl Command {
-    pub fn name(&self) -> &str {
-        match self {
-            Self::UserCommand(command) => &command.name,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -270,6 +269,8 @@ pub enum SystemCommand {
 pub struct UserCommand {
     pub name: String,
     pub script: String,
+    #[serde(default)]
+    pub args: Vec<String>,
 }
 
 impl UserCommand {
@@ -281,7 +282,7 @@ impl UserCommand {
     }
 }
 
-pub fn execute_script(script: &str) -> anyhow::Result<()> {
+pub fn execute_script(script: &str, args: &[String]) -> anyhow::Result<()> {
     // Create a temporary folder in which the script file will be
     // created.
     let tmp_dir = tempfile::tempdir()?;
@@ -304,6 +305,7 @@ pub fn execute_script(script: &str) -> anyhow::Result<()> {
 
     // Execute the script
     let mut child = process::Command::new(file_path)
+        .args(args)
         .spawn()
         .expect("script command failed to start");
 
