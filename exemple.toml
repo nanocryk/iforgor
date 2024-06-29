@@ -1,4 +1,8 @@
 [[entries]]
+name = "iforgor: Hello, world!"
+script = "echo Hello, world!"
+
+[[entries]]
 name = "APT: Update packages"
 script = "sudo apt update && sudo apt upgrade"
 

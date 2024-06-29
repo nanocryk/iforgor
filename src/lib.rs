@@ -1,16 +1,22 @@
 mod on_disk;
+mod tui;
 
 pub use on_disk::OnDisk;
 
-use anyhow::{anyhow, bail};
-use serde::{Deserialize, Serialize};
-use sha3::{Digest, Sha3_256};
-use std::collections::{BTreeMap, BTreeSet};
-use std::fs::File;
-use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
-use std::process::{self};
+use {
+    anyhow::{anyhow, bail},
+    serde::{Deserialize, Serialize},
+    sha3::{Digest, Sha3_256},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        fmt::Display,
+        fs::File,
+        io::Write,
+        os::unix::fs::PermissionsExt,
+        path::PathBuf,
+        process::{self},
+    },
+};
 
 type CommandId = String;
 
@@ -27,7 +33,7 @@ pub struct Cli {
     registry_path: bool,
 
     #[command(subcommand)]
-    command: CliCommands,
+    command: Option<CliCommands>,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -39,17 +45,29 @@ pub enum CliCommands {
     /// using the provided number.
     #[command(alias = "s")]
     Search { search: Vec<String> },
-    /// [short: h] List last run commands and allow to rerun them. 
+    /// [short: h] List last run commands and allow to rerun them.
     #[command(alias = "h")]
-    History { 
+    History {
         #[arg(long)]
-        purge: bool
+        purge: bool,
     },
     /// Add a source
     AddSource { path: PathBuf },
     /// [short: r] Reload commands from sources.
     #[command(alias = "r")]
     Reload,
+}
+
+#[derive(Debug, Clone)]
+struct IdAndName {
+    pub id: CommandId,
+    pub name: String,
+}
+
+impl Display for IdAndName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "{}", self.name)
+    }
 }
 
 impl Cli {
@@ -71,7 +89,46 @@ impl Cli {
             OnDisk::<CommandsRegistry>::open_or_default(registry_path)?
         };
 
-        let command = self.command;
+        let Some(command) = self.command else {
+            loop {
+                let commands: Vec<_> = registry
+                    .commands
+                    .iter()
+                    .map(|(id, command)| IdAndName {
+                        id: id.clone(),
+                        name: command.name().to_string(),
+                    })
+                    .collect();
+
+                let history: Vec<_> = registry
+                    .history
+                    .iter()
+                    .filter_map(|id| registry.commands.get(id).map(|c| (id, c)))
+                    .map(|(id, c)| IdAndName {
+                        id: id.clone(),
+                        name: c.name().to_string(),
+                    })
+                    .collect();
+
+                let history: Vec<_> = history.into_iter().rev().collect();
+
+                let Some(choice) = tui::tui_choose_in_list(&commands, &history)? else {
+                    break;
+                };
+
+                registry.run_script_by_id(&choice.id)?;
+                registry.save()?;
+
+                print!("\n🏁 Execution complete, press Enter to proceed.");
+                std::io::stdout().flush()?;
+                let mut buf = String::new();
+                std::io::stdin().read_line(&mut buf)?;
+
+                println!("━━━━━━━━━━━━━━━");
+            }
+
+            return Ok(());
+        };
 
         match command {
             CliCommands::RunId { id } => {
@@ -80,12 +137,15 @@ impl Cli {
             CliCommands::Search { search } => {
                 let search: Vec<_> = search.into_iter().map(|s| s.to_lowercase()).collect();
 
-                let commands: Vec<(CommandId, String)> = registry
+                let commands: Vec<_> = registry
                     .commands
                     .iter()
                     .filter_map(|(id, command)| {
                         if search_filter(&command, &search) {
-                            Some((id.clone(), command.name().to_string()))
+                            Some(IdAndName {
+                                id: id.clone(),
+                                name: command.name().to_string(),
+                            })
                         } else {
                             None
                         }
@@ -93,7 +153,7 @@ impl Cli {
                     .take(10)
                     .collect();
 
-                let Some(id) = choose_amongst_list(&commands)? else {
+                let Some(IdAndName { id, .. }) = choose_in_list(&commands)? else {
                     return Ok(());
                 };
 
@@ -112,19 +172,22 @@ impl Cli {
                     registry.history = Vec::new();
                     registry.save()?;
                     println!("Purged history!");
-                    return Ok(())
+                    return Ok(());
                 }
 
                 let history: Vec<_> = registry
                     .history
                     .iter()
                     .filter_map(|id| registry.commands.get(id).map(|c| (id, c)))
-                    .map(|(id, c)| (id.clone(), c.name().to_owned()))
+                    .map(|(id, c)| IdAndName {
+                        id: id.clone(),
+                        name: c.name().to_string(),
+                    })
                     .collect();
 
                 let history: Vec<_> = history.into_iter().rev().collect();
 
-                let Some(id) = choose_amongst_list(&history)? else {
+                let Some(IdAndName { id, .. }) = choose_in_list(&history)? else {
                     return Ok(());
                 };
 
@@ -147,16 +210,16 @@ impl Cli {
     }
 }
 
-fn choose_amongst_list(list: &[(CommandId, String)]) -> anyhow::Result<Option<CommandId>> {
+fn choose_in_list<T: Display>(list: &[T]) -> anyhow::Result<Option<&T>> {
     if list.is_empty() {
-        bail!("Result list is empty");
+        bail!("List is empty");
     }
 
-    for (i, (_id, name)) in list.iter().enumerate() {
-        println!("{i}. {}", name);
+    for (i, item) in list.iter().enumerate() {
+        println!("{i}. {item}");
     }
 
-    print!("Which script do you want to run (0-9, a/q to abort): ");
+    print!("Selection (a/q to abort): ");
     std::io::stdout().flush()?;
 
     let mut line = String::new();
@@ -169,11 +232,11 @@ fn choose_amongst_list(list: &[(CommandId, String)]) -> anyhow::Result<Option<Co
 
     let choice: u8 = line.parse()?;
 
-    let Some((id, _name)) = list.get(choice as usize) else {
-        bail!("No script with this index");
+    let Some(item) = list.get(choice as usize) else {
+        bail!("Out of bound index");
     };
 
-    Ok(Some(id.clone()))
+    Ok(Some(item))
 }
 
 fn load_scripts_for_source(
@@ -220,15 +283,12 @@ impl CommandsRegistry {
         let mut history = Vec::new();
         std::mem::swap(&mut self.history, &mut history);
 
-        self.history = history
-            .into_iter()
-            .filter(|hid| hid != id)
-            .collect();
+        self.history = history.into_iter().filter(|hid| hid != id).collect();
         self.history.push(id.clone());
 
         match entry {
             Command::UserCommand(UserCommand { name, script }) => {
-                println!("Running command {name}\n");
+                println!("💭 Running \"{name}\"\n");
                 execute_script(&script)?;
             }
         }

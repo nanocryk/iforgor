@@ -1,10 +1,13 @@
-use anyhow::anyhow;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use std::fs::File;
-use std::io::{Read, Write};
-use std::ops::{Deref, DerefMut};
-use std::path::PathBuf;
+use {
+    anyhow::anyhow,
+    serde::{de::DeserializeOwned, Serialize},
+    std::{
+        fs::File,
+        io::{Read, Write},
+        ops::{Deref, DerefMut},
+        path::PathBuf,
+    },
+};
 
 #[derive(Debug)]
 pub struct OnDisk<T> {
