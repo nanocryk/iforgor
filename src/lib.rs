@@ -222,8 +222,6 @@ impl CommandsRegistry {
             bail!("Unknown command ID {id}")
         };
 
-        
-
         // Update history before running the script in case it fails.
         let mut history = Vec::new();
         std::mem::swap(&mut self.history, &mut history);
@@ -237,7 +235,7 @@ impl CommandsRegistry {
         if !args.is_empty() {
             println!("This script requires the following arguments:")
         }
-        for arg in args  {
+        for arg in args {
             let mut buf = String::new();
             print!("- {arg}: ");
             std::io::stdout().flush()?;
