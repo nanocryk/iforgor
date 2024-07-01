@@ -1,6 +1,5 @@
 pub mod ctrlc_handler;
 mod on_disk;
-mod tui;
 
 pub use on_disk::OnDisk;
 
@@ -28,7 +27,7 @@ pub struct Cli {
     /// Cleanup config file, which will remove all registered sources and commands.
     /// Use it in case of file corruption or change in format after an update.
     #[arg(long)]
-    cleanup_registry: bool,
+    purge_all: bool,
 
     /// Cleanup the history of ran commands.
     #[arg(long)]
@@ -81,59 +80,88 @@ impl Cli {
         let mut app_path = home::home_dir().ok_or(anyhow!("unable to fetch home dir"))?;
         app_path.push(".iforgor");
         let registry_path = app_path.join("registry.toml");
+        let history_path = app_path.join("history.toml");
 
         if self.registry_path {
             println!("Registry path: {}", registry_path.display());
             return Ok(());
         }
 
-        let mut registry = if self.cleanup_registry {
-            println!("Cleaning config file ({})", registry_path.display());
-            let registry = OnDisk::<CommandsRegistry>::new_from_default(registry_path);
-            registry.save()?;
-            registry
-        } else {
-            OnDisk::<CommandsRegistry>::open_or_default(registry_path)?
-        };
+        if self.purge_all {
+            OnDisk::<Registry>::new_from_default(registry_path).save()?;
+            OnDisk::<History>::new_from_default(history_path).save()?;
+
+            println!("🗑️ Purged registry and history!");
+            return Ok(());
+        }
 
         if self.purge_history {
-            registry.history = Vec::new();
-            registry.save()?;
+            OnDisk::<History>::new_from_default(history_path).save()?;
+
             println!("🗑️ Purged history!");
             return Ok(());
         }
+
+        let mut registry = OnDisk::<Registry>::open_or_default(registry_path)?;
+        let mut history = OnDisk::<History>::open_or_default(history_path)?;
 
         let Some(command) = self.command else {
             loop {
                 let commands: Vec<_> = registry
                     .commands
                     .iter()
-                    .map(|(id, command)| IdAndName {
-                        id: id.clone(),
+                    .map(|(id, command)| ichoose::ListEntry {
+                        key: id.clone(),
                         name: command.name.to_string(),
                     })
                     .collect();
 
-                let history: Vec<_> = registry
+                let history_list: Vec<_> = history
                     .history
                     .iter()
                     .filter_map(|id| registry.commands.get(id).map(|c| (id, c)))
-                    .map(|(id, c)| IdAndName {
-                        id: id.clone(),
+                    .map(|(id, c)| ichoose::ListEntry {
+                        key: id.clone(),
                         name: c.name.to_string(),
                     })
                     .collect();
 
-                let history: Vec<_> = history.into_iter().rev().collect();
+                let history_list: Vec<_> = history_list.into_iter().rev().collect();
 
-                let Some(choice) = tui::tui_choose_in_list(&commands, &history)? else {
+                let choices: Vec<_> = ichoose::ListSearch::new(&commands)
+                    .empty_search_list(Some(&history_list))
+                    .title(" iforgor ".to_string())
+                    .text(
+                        "Run `iforgor help` to learn about subcommands. \
+            Search for multiple search terms by separating them with commas `,` \
+            Empty search displays history, type anything (including spaces) to \
+            display the filtered full list of commands."
+                            .to_string(),
+                    )
+                    .run()?
+                    .into_iter()
+                    .collect();
+
+                if choices.is_empty() {
                     break;
-                };
+                }
 
-                registry.run_script_by_id(&choice.id)?;
-                registry.save()?;
+                if choices.len() > 1 {
+                    bail!("Bug: There should be only one entry selected");
+                }
 
-                print!("\n🏁 Execution complete, press Enter to proceed.");
+                let choice = &choices[0];
+
+                let status = registry.run_script_by_id(choice, &mut history)?;
+                history.save()?;
+
+                match status.code() {
+                    Some(code) => {
+                        print!("\n🏁 Execution complete with code {code}, press Enter to proceed.")
+                    }
+                    None => print!("\n🏁 Execution terminated by signal, press Enter to proceed."),
+                }
+
                 std::io::stdout().flush()?;
                 let mut buf = String::new();
                 std::io::stdin().read_line(&mut buf)?;
@@ -159,23 +187,27 @@ impl Cli {
                 inner: SourceCommands::List,
             } => {
                 for source in &registry.sources {
-                    println!("- {}", source.display());
+                    println!("{}", source.display());
                 }
             }
             CliCommands::Source {
                 inner: SourceCommands::Remove { path },
             } => {
-                let path = std::fs::canonicalize(path)?;
-
+                // try to remove raw path, this allow to delete sources that no
+                // longer exist on disk
                 if !registry.sources.remove(&path) {
-                    bail!("Path was not a registered source");
-                }
+                    let path = std::fs::canonicalize(path)?;
 
-                println!("Removed source \"{}\"", path.display());
-                println!(
-                    "Commands in that source are still registred. Run \
-                `iforgor reload` to reload commands from remaining sources only"
-                );
+                    if !registry.sources.remove(&path) {
+                        bail!("Path was not a registered source");
+                    }
+
+                    println!("Removed source \"{}\"", path.display());
+                    println!(
+                        "Commands in that source are still registred. Run \
+                    `iforgor reload` to reload commands from remaining sources only"
+                    );
+                }
             }
             CliCommands::Reload => {
                 let mut commands = BTreeMap::new();
@@ -189,6 +221,7 @@ impl Cli {
         }
 
         registry.save()?;
+        history.save()?;
 
         Ok(())
     }
@@ -211,31 +244,41 @@ fn load_scripts_for_source(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct CommandsRegistry {
+pub struct History {
     pub history: Vec<CommandId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Registry {
     pub sources: BTreeSet<PathBuf>,
     pub commands: BTreeMap<CommandId, UserCommand>,
 }
 
-impl CommandsRegistry {
-    pub fn run_script_by_id(&mut self, id: &CommandId) -> anyhow::Result<()> {
+impl Registry {
+    pub fn run_script_by_id(
+        &mut self,
+        id: &CommandId,
+        history: &mut History,
+    ) -> anyhow::Result<process::ExitStatus> {
         let Some(entry) = self.commands.get(id) else {
             bail!("Unknown command ID {id}")
         };
 
-        // Update history before running the script in case it fails.
-        let mut history = Vec::new();
-        std::mem::swap(&mut self.history, &mut history);
+        let mut alt = Vec::new();
+        std::mem::swap(&mut alt, &mut history.history);
 
-        self.history = history.into_iter().filter(|hid| hid != id).collect();
-        self.history.push(id.clone());
+        history.history = alt.into_iter().filter(|hid| hid != id).collect();
+        history.history.push(id.clone());
 
         let UserCommand { name, script, args } = entry;
 
         let mut args_values = Vec::new();
         if !args.is_empty() {
-            println!("This script requires the following arguments (use Ctrl+C to abort execution):")
+            println!(
+                "This script requires the following arguments (use Ctrl+C to abort execution):"
+            )
         }
+
         for arg in args {
             let mut buf = String::new();
             print!("- {arg}: ");
@@ -247,10 +290,10 @@ impl CommandsRegistry {
         println!("💭 Running \"{name}\"\n");
 
         ctrlc_handler::set_mode(ctrlc_handler::Mode::Ignore);
-        execute_script(script, &args_values)?;
+        let status = execute_script(script, &args_values)?;
         ctrlc_handler::set_mode(ctrlc_handler::Mode::Kill);
 
-        Ok(())
+        Ok(status)
     }
 }
 
@@ -283,7 +326,7 @@ impl UserCommand {
     }
 }
 
-pub fn execute_script(script: &str, args: &[String]) -> anyhow::Result<()> {
+pub fn execute_script(script: &str, args: &[String]) -> anyhow::Result<process::ExitStatus> {
     // Create a temporary folder in which the script file will be
     // created.
     let tmp_dir = tempfile::tempdir()?;
@@ -310,9 +353,9 @@ pub fn execute_script(script: &str, args: &[String]) -> anyhow::Result<()> {
         .spawn()
         .expect("script command failed to start");
 
-    child.wait()?;
+    let status = child.wait()?;
 
     tmp_dir.close()?;
 
-    Ok(())
+    Ok(status)
 }

@@ -1,0 +1,9 @@
+[package]
+name = "ichoose"
+edition = "2021"
+version = "0.1.0"
+
+[dependencies]
+clap = { workspace = true }
+ratatui = { workspace = true }
+tap = { workspace = true }
