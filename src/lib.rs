@@ -1,3 +1,4 @@
+pub mod ctrlc_handler;
 mod on_disk;
 mod tui;
 
@@ -233,7 +234,7 @@ impl CommandsRegistry {
 
         let mut args_values = Vec::new();
         if !args.is_empty() {
-            println!("This script requires the following arguments:")
+            println!("This script requires the following arguments (use Ctrl+C to abort execution):")
         }
         for arg in args {
             let mut buf = String::new();
@@ -245,7 +246,9 @@ impl CommandsRegistry {
 
         println!("💭 Running \"{name}\"\n");
 
+        ctrlc_handler::set_mode(ctrlc_handler::Mode::Ignore);
         execute_script(script, &args_values)?;
+        ctrlc_handler::set_mode(ctrlc_handler::Mode::Kill);
 
         Ok(())
     }
