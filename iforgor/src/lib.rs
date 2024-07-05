@@ -128,19 +128,22 @@ impl Cli {
 
                 let history_list: Vec<_> = history_list.into_iter().rev().collect();
 
-                let choices: Vec<_> = ichoose::ListSearch::new(&commands)
-                    .empty_search_list(Some(&history_list))
-                    .title(" iforgor ".to_string())
-                    .text(
-                        "Run `iforgor help` to learn about subcommands. \
-            Search for multiple search terms by separating them with commas `,` \
-            Empty search displays history, type anything (including spaces) to \
-            display the filtered full list of commands."
+                let choices: Vec<_> = ichoose::ListSearch {
+                    items: &commands,
+                    extra: ichoose::ListSearchExtra {
+                        empty_search_list: Some(&history_list),
+                        title: " iforgor ".to_string(),
+                        text: "Run `iforgor help` to learn about subcommands. \
+                            Search for multiple search terms by separating them with commas `,` \
+                            Empty search displays history, type anything (including spaces) to \
+                            display the filtered full list of commands."
                             .to_string(),
-                    )
-                    .run()?
-                    .into_iter()
-                    .collect();
+                        ..Default::default()
+                    },
+                }
+                .run()?
+                .into_iter()
+                .collect();
 
                 if choices.is_empty() {
                     break;
@@ -164,7 +167,12 @@ impl Cli {
 
                 std::io::stdout().flush()?;
                 let mut buf = String::new();
+
+                // User may press Ctrl+C wanting to stop the script, but the execute finishes just before the press.
+                // Let's avoid killing iforgor in that situation.
+                ctrlc_handler::set_mode(ctrlc_handler::Mode::Ignore);
                 std::io::stdin().read_line(&mut buf)?;
+                ctrlc_handler::set_mode(ctrlc_handler::Mode::Kill);
 
                 println!("━━━━━━━━━━━━━━━");
             }

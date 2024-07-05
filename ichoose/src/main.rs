@@ -38,14 +38,15 @@ impl Cli {
             })
             .collect();
 
-        let choices = ichoose::ListSearch::new(&lines)
-            .multi_select(self.multi)
-            .title(format!(
-                " {} ",
-                self.title.unwrap_or_else(|| "ichoose".to_string())
-            ))
-            .text(self.text.unwrap_or_default())
-            .run()?;
+        let choices = ichoose::ListSearch {
+            items: &lines,
+            extra: ichoose::ListSearchExtra {
+                title: format!(" {} ", self.title.unwrap_or_else(|| "ichoose".to_string())),
+                text: self.text.unwrap_or_default(),
+                ..Default::default()
+            },
+        }
+        .run()?;
 
         if choices.is_empty() {
             std::process::exit(1);

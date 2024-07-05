@@ -27,69 +27,58 @@ pub struct ListEntry<K> {
     pub name: String,
 }
 
-pub struct ListSearch<'a, K> {
+#[derive(Debug, Clone, Default)]
+pub struct ListSearchExtra<'k, K> {
     /// Title of the box.
-    title: String,
+    pub title: String,
     /// Text displayed at the top of the box, usually giving context for the selection.
-    text: String,
-
-    /// The main list we want to search into.
-    main_list: &'a [ListEntry<K>],
+    pub text: String,
+    /// Is multiselection enabled.
+    pub multi_select: bool,
     /// List showed if the search input is empty (history for iforgor).
-    empty_search_list: Option<&'a [ListEntry<K>]>,
+    pub empty_search_list: Option<&'k [ListEntry<K>]>,
+}
+
+pub struct ListSearch<'k, K> {
+    /// Customization options.
+    pub extra: ListSearchExtra<'k, K>,
+    /// The main list we want to search into.
+    pub items: &'k [ListEntry<K>],
+}
+
+struct ListSearchRunner<'c, 'k, K> {
+    config: &'c ListSearch<'k, K>,
 
     /// List currently being displayed (filtered by search).
     /// Used to properly find which entry is selected when pressing Enter.
-    displayed_list: Vec<&'a ListEntry<K>>,
+    displayed_list: Vec<&'k ListEntry<K>>,
     /// Content of the search input field.
     search_input: String,
-
-    /// Is multiselection enabled.
-    multi_select: bool,
     /// Set of selected items.
     selected_items: BTreeSet<K>,
-
     /// State of the TUI List.
     ui_list_state: ListState,
-
     /// Should the TUI exit?
     exit: bool,
 }
 
-impl<'a, K: Ord + Clone> ListSearch<'a, K> {
-    pub fn new(list: &'a [ListEntry<K>]) -> Self {
-        Self {
-            title: String::new(),
-            text: String::new(),
-            main_list: list,
-            empty_search_list: None,
+impl<'k, K: Ord + Clone> ListSearch<'k, K> {
+    pub fn run(&self) -> io::Result<BTreeSet<K>> {
+        ListSearchRunner {
+            config: self,
             displayed_list: Vec::new(),
             search_input: String::new(),
-            multi_select: false,
             selected_items: BTreeSet::new(),
             ui_list_state: ListState::default().tap_mut(|v| v.select(Some(0))),
             exit: false,
         }
+        .run()
     }
+}
 
-    pub fn title(self, title: String) -> Self {
-        self.tap_mut(|v| v.title = title)
-    }
-
-    pub fn text(self, text: String) -> Self {
-        self.tap_mut(|v| v.text = text)
-    }
-
-    pub fn multi_select(self, multi: bool) -> Self {
-        self.tap_mut(|v| v.multi_select = multi)
-    }
-
-    pub fn empty_search_list(self, list: Option<&'a [ListEntry<K>]>) -> Self {
-        self.tap_mut(|v| v.empty_search_list = list)
-    }
-
+impl<'c, 'k, K: Ord + Clone> ListSearchRunner<'c, 'k, K> {
     fn update_displayed_list(&mut self) {
-        if let Some(alt_list) = self.empty_search_list {
+        if let Some(alt_list) = self.config.extra.empty_search_list {
             if self.search_input.is_empty() {
                 self.displayed_list = alt_list.iter().collect();
                 return;
@@ -100,7 +89,8 @@ impl<'a, K: Ord + Clone> ListSearch<'a, K> {
         let search: Vec<_> = search.split(',').map(|s| s.trim()).collect();
 
         self.displayed_list = self
-            .main_list
+            .config
+            .items
             .iter()
             .filter(|item| search_filter(&item.name, &search))
             .collect::<Vec<_>>()
@@ -161,7 +151,7 @@ impl<'a, K: Ord + Clone> ListSearch<'a, K> {
             KeyCode::Enter => {
                 self.exit = true;
 
-                if self.multi_select {
+                if self.config.extra.multi_select {
                     return;
                 }
 
@@ -191,7 +181,7 @@ impl<'a, K: Ord + Clone> ListSearch<'a, K> {
             KeyCode::Down => {
                 self.ui_list_state.select_next();
             }
-            KeyCode::Left if self.multi_select => {
+            KeyCode::Left if self.config.extra.multi_select => {
                 if self
                     .displayed_list
                     .iter()
@@ -206,7 +196,7 @@ impl<'a, K: Ord + Clone> ListSearch<'a, K> {
                     }
                 }
             }
-            KeyCode::Right if self.multi_select => {
+            KeyCode::Right if self.config.extra.multi_select => {
                 let Some(selected_index) = self.ui_list_state.selected() else {
                     return;
                 };
@@ -226,15 +216,15 @@ impl<'a, K: Ord + Clone> ListSearch<'a, K> {
     }
 }
 
-impl<'a, K: Ord + Clone> Widget for &mut ListSearch<'a, K> {
+impl<'c, 'k, K: Ord + Clone> Widget for &mut ListSearchRunner<'c, 'k, K> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         // Display outer block
-        let title = Title::from(self.title.as_str().bold().magenta());
+        let title = Title::from(self.config.extra.title.as_str().bold().magenta());
 
         let mut instructions = Vec::new();
         instructions.add_instruction("Change Line", "Up/Down");
 
-        if self.multi_select {
+        if self.config.extra.multi_select {
             instructions.add_instruction("Toogle select", "Right");
             instructions.add_instruction("Toogle all", "Left");
         }
@@ -290,7 +280,7 @@ impl<'a, K: Ord + Clone> Widget for &mut ListSearch<'a, K> {
             .displayed_list
             .iter()
             .map(|item| {
-                if self.multi_select {
+                if self.config.extra.multi_select {
                     let c = if self.selected_items.contains(&item.key) {
                         "X"
                     } else {
@@ -311,7 +301,7 @@ impl<'a, K: Ord + Clone> Widget for &mut ListSearch<'a, K> {
         StatefulWidget::render(&list, list_area, buf, &mut self.ui_list_state);
 
         // Render extra text
-        Paragraph::new(self.text.as_str())
+        Paragraph::new(self.config.extra.text.as_str())
             .wrap(Wrap { trim: true })
             .style(Style::new().cyan().italic())
             .render(extra_text, buf);
@@ -336,7 +326,7 @@ trait AddInstruction {
     fn add_instruction(&mut self, name: &str, keys: &str);
 }
 
-impl<'a> AddInstruction for Vec<Span<'a>> {
+impl<'k> AddInstruction for Vec<Span<'k>> {
     fn add_instruction(&mut self, name: &str, keys: &str) {
         self.push(format!(" {name} ").into());
         self.push(format!("<{keys}>").blue().bold());
