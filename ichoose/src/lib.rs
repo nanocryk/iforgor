@@ -39,6 +39,32 @@ pub struct ListSearchExtra<'k, K> {
     pub empty_search_list: Option<&'k [ListEntry<K>]>,
 }
 
+/// Main type to setup the list search.
+///
+/// ```
+/// # fn main() -> std::io::Result<()> {
+/// let list: Vec<_> = ["Alpha", "Beta", "Omega"]
+///     .into_iter()
+///     .enumerate()
+///     .map(|(index, item)| ichoose::ListEntry {
+///         key: index.to_string(),
+///         name: item.to_string(),
+///     })
+///     .collect();
+///
+/// let choices = ichoose::ListSearch {
+///    items: &list,
+///    extra: ichoose::ListSearchExtra {
+///        title: "Exemple title".to_string(),
+///        ..Default::default()
+///    },
+/// }
+/// .run()?;
+///
+/// println!("{choices:?}");
+/// # Ok(())
+/// # }
+/// ```
 pub struct ListSearch<'k, K> {
     /// Customization options.
     pub extra: ListSearchExtra<'k, K>,

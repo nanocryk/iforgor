@@ -43,3 +43,36 @@ iforgor source list \
 echo
 echo 🛑 Sources deleted, you should restart iforgor to see up-to-date commands list
 """
+
+
+[[entries]]
+name = "[Rust] Cargo check (debug)"
+script = "cargo check"
+
+[[entries]]
+name = "[Rust] Cargo build (debug)"
+script = "cargo build"
+
+[[entries]]
+name = "[Rust] Cargo run (debug)"
+script = "cargo run"
+
+[[entries]]
+name = "[Rust] Cargo build (release)"
+script = "cargo build --release"
+
+[[entries]]
+name = "[Rust] Cargo run (release)"
+script = "cargo run --release"
+
+[[entries]]
+name = "[Rust] Cargo fmt"
+script = "cargo fmt"
+
+[[entries]]
+name = "[Rust] Cargo doc"
+script = "cargo doc"
+
+[[entries]]
+name = "[Rust] Cargo doc (+ open in browser)"
+script = "cargo doc --open"
