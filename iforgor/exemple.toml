@@ -4,15 +4,18 @@ script = "echo Hello, world!"
 
 [[entries]]
 name = "[Exemple] Echo argument"
+only_on = "Linux"
 script = "echo $1"
 args = ["Text to print"]
 
 [[entries]]
 name = "[APT] Update packages"
+only_on = "Linux"
 script = "sudo apt update && sudo apt upgrade"
 
 [[entries]]
 name = "Force kill processes with interactive selection"
+only_on = "Linux"
 script = """
 ps -x -o 'pid,pcpu,cmd' \
 | tail -n +2 \
@@ -31,6 +34,7 @@ echo 🛑 Sources reloaded, you should restart iforgor to see up-to-date command
 
 [[entries]]
 name = "[iforgor] Remove sources and reload"
+only_on = "Linux"
 script = """
 iforgor source list \
 | while read x ; do echo "$x @ $x" ; done \

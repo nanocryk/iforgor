@@ -228,6 +228,13 @@ fn load_scripts_for_source(
     let scripts = OnDisk::<CommandsSource>::open(path.clone())?.into_inner();
 
     for script in scripts.entries {
+        // Ignore scripts incompatible with current platform.
+        match script.only_on {
+            Some(Platform::Windows) if !cfg!(target_os = "windows") => continue,
+            Some(Platform::Linux) if !cfg!(target_os = "linux") => continue,
+            _ => (),
+        }
+
         let id = script.generate_id();
         println!("- Added command: {}", script.name);
         commands.insert(id, script);
@@ -263,7 +270,7 @@ impl Registry {
         history.history = alt.into_iter().filter(|hid| hid != id).collect();
         history.history.push(id.clone());
 
-        let UserCommand { name, script, args } = entry;
+        let UserCommand { name, script, args, .. } = entry;
 
         let mut args_values = Vec::new();
         if !args.is_empty() {
@@ -308,6 +315,13 @@ pub struct UserCommand {
     pub script: String,
     #[serde(default)]
     pub args: Vec<String>,
+    pub only_on: Option<Platform>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Platform {
+    Linux,
+    Windows,
 }
 
 impl UserCommand {
