@@ -112,11 +112,16 @@ impl Cli {
                     .collect();
 
                 let history_list: Vec<_> = history_list.into_iter().rev().collect();
+                let history_list = if history_list.is_empty() {
+                    None
+                } else {
+                    Some(history_list.as_slice())
+                };
 
                 let choices: Vec<_> = ichoose::ListSearch {
                     items: &commands,
                     extra: ichoose::ListSearchExtra {
-                        empty_search_list: Some(&history_list),
+                        empty_search_list: history_list,
                         title: " iforgor ".to_string(),
                         text: "Run `iforgor help` to learn about subcommands. \
                             Search for multiple search terms by separating them with commas `,` \
@@ -270,7 +275,9 @@ impl Registry {
         history.history = alt.into_iter().filter(|hid| hid != id).collect();
         history.history.push(id.clone());
 
-        let UserCommand { name, script, args, .. } = entry;
+        let UserCommand {
+            name, script, args, ..
+        } = entry;
 
         let mut args_values = Vec::new();
         if !args.is_empty() {
