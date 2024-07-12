@@ -1,7 +1,9 @@
 [package]
 name = "iforgor"
-edition = "2021"
 version = "0.1.0"
+authors = [ "nanocryk" ]
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }

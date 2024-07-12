@@ -1,7 +1,9 @@
 [package]
 name = "ichoose"
-edition = "2021"
 version = "0.1.0"
+authors = [ "nanocryk" ]
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
 clap = { workspace = true }

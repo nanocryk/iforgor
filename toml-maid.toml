@@ -1,0 +1,11 @@
+keys = [
+	"package",
+	"dependencies",
+	"name",
+	"version",
+]
+
+inline_keys = [
+	"version",
+	"features",
+]
