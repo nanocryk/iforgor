@@ -5,6 +5,7 @@ authors = [ "nanocryk" ]
 edition = { workspace = true }
 license = { workspace = true }
 readme = "../README.md"
+description = "The CLI tool for all those commands you forget about"
 
 [dependencies]
 anyhow = { workspace = true }

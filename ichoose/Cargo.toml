@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = [ "nanocryk" ]
 edition = { workspace = true }
 license = { workspace = true }
+description = "Interactive terminal list selection (lib+bin)"
 
 [dependencies]
 clap = { workspace = true }
