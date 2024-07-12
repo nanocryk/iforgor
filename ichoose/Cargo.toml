@@ -2,8 +2,8 @@
 name = "ichoose"
 version = "0.1.0"
 authors = [ "nanocryk" ]
-edition.workspace = true
-license.workspace = true
+edition = { workspace = true }
+license = { workspace = true }
 
 [dependencies]
 clap = { workspace = true }

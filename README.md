@@ -1,4 +1,9 @@
 # iforgor
+
+[![iforgor crate](https://img.shields.io/crates/v/iforgor.svg)](https://crates.io/crates/iforgor)
+[![ichoose crate](https://img.shields.io/crates/v/ichoose.svg)](https://crates.io/crates/ichoose)
+[![ichoose documentation](https://docs.rs/ichoose/badge.svg)](https://docs.rs/ichoose)
+
 The CLI tool for all those commands you forget about
 
 ## Installation
