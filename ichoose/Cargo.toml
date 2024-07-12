@@ -2,9 +2,10 @@
 name = "ichoose"
 version = "0.1.0"
 authors = [ "nanocryk" ]
+description = "Interactive terminal list selection (lib+bin)"
 edition = { workspace = true }
 license = { workspace = true }
-description = "Interactive terminal list selection (lib+bin)"
+repository = "https://github.com/nanocryk/iforgor"
 
 [dependencies]
 clap = { workspace = true }

@@ -2,10 +2,11 @@
 name = "iforgor"
 version = "0.1.0"
 authors = [ "nanocryk" ]
+description = "The CLI tool for all those commands you forget about"
 edition = { workspace = true }
 license = { workspace = true }
 readme = "../README.md"
-description = "The CLI tool for all those commands you forget about"
+repository = "https://github.com/nanocryk/iforgor"
 
 [dependencies]
 anyhow = { workspace = true }
