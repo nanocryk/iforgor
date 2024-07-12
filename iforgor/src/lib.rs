@@ -9,10 +9,8 @@ use {
     sha3::{Digest, Sha3_256},
     std::{
         collections::{BTreeMap, BTreeSet},
-        fmt::Display,
         fs::File,
         io::Write,
-        os::unix::fs::PermissionsExt,
         path::PathBuf,
         process::{self},
     },
@@ -60,19 +58,6 @@ pub enum SourceCommands {
     List,
     /// Remove a source
     Remove { path: PathBuf },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct IdAndName {
-    // order by name first
-    pub name: String,
-    pub id: CommandId,
-}
-
-impl Display for IdAndName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{}", self.name)
-    }
 }
 
 impl Cli {
@@ -334,7 +319,10 @@ impl UserCommand {
     }
 }
 
+#[cfg(target_os = "linux")]
 pub fn execute_script(script: &str, args: &[String]) -> anyhow::Result<process::ExitStatus> {
+    use std::os::unix::fs::PermissionsExt;
+
     // Create a temporary folder in which the script file will be
     // created.
     let tmp_dir = tempfile::tempdir()?;
@@ -350,9 +338,40 @@ pub fn execute_script(script: &str, args: &[String]) -> anyhow::Result<process::
         tmp_file.flush()?;
 
         // Set permissions to read/execute.
+
         let mut permissions = tmp_file.metadata()?.permissions();
         permissions.set_mode(0o500);
         tmp_file.set_permissions(permissions)?;
+    }
+
+    // Execute the script
+    let mut child = process::Command::new(file_path)
+        .args(args)
+        .spawn()
+        .expect("script command failed to start");
+
+    let status = child.wait()?;
+
+    tmp_dir.close()?;
+
+    Ok(status)
+}
+
+#[cfg(target_os = "windows")]
+pub fn execute_script(script: &str, args: &[String]) -> anyhow::Result<process::ExitStatus> {
+    // Create a temporary folder in which the script file will be
+    // created.
+    let tmp_dir = tempfile::tempdir()?;
+    let file_path = tmp_dir.path().join("script.bat");
+
+    // Create the file, write into it and change its permissions.
+    // File is closed at the end of scope, which will allow to
+    // execute it after.
+    {
+        let mut tmp_file = File::create(&file_path)?;
+        tmp_file.write_all(b"@echo off\n")?;
+        tmp_file.write_all(script.as_bytes())?;
+        tmp_file.flush()?;
     }
 
     // Execute the script
