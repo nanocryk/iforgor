@@ -465,13 +465,10 @@ pub fn execute_script_powershell(
         tmp_file.flush()?;
     }
 
-    let powershell_cmd: Vec<_> = [
-        "&".to_string(),
-        format!("{}", file_path.display()),
-    ]
-    .into_iter()
-    .chain(args.iter().map(|arg| snailquote::escape(arg).into_owned()))
-    .collect();
+    let powershell_cmd: Vec<_> = ["&".to_string(), format!("{}", file_path.display())]
+        .into_iter()
+        .chain(args.iter().map(|arg| snailquote::escape(arg).into_owned()))
+        .collect();
 
     let powershell_cmd = powershell_cmd.join(" ");
 
