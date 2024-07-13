@@ -32,7 +32,7 @@ impl Cli {
             .map(|line| {
                 let mut line_iter = line.splitn(2, " @ ");
                 let key = line_iter.next().expect("missing id").trim();
-                let name = line_iter.next().expect("missing name").to_string();
+                let name = line_iter.next().unwrap_or(key).to_string();
 
                 ichoose::ListEntry { key, name }
             })
