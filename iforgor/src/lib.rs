@@ -355,7 +355,9 @@ impl Default for Shell {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Platform {
+    #[serde(alias = "linux")]
     Linux,
+    #[serde(alias = "windows")]
     Windows,
 }
 

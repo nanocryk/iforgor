@@ -10,7 +10,7 @@ Run `cargo install iforgor`.
 
 ## Configuration
 
-Add script source files using `iforgor source add <PATH>` (see [exemple](iforgor/exemple.toml)).
+Add script source files using `iforgor source add <PATH>` (see [exemple](exemple.toml)).
 Each entry follow the following format:
 
 ```toml
@@ -22,6 +22,8 @@ script = "WRITE SCRIPT HERE"
 Entry can also contain the following optional fields:
 - `only_on = "OS"`: script will only be loaded on provided OS. Accepts `Linux` and `Windows`.
 - `args = ["Arg 1", "Arg 2"]`: list arguments labels that will be printed when calling.
+- `shell = "SHELL`: selects the shell to execute the script with. Supports `Sh` (default for Linux),
+  `Cmd` (default for Windows) and `Powershell`.
 
 After modifying a source file `iforgor reload` should be called to update its internal list.
 
