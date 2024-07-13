@@ -3,6 +3,15 @@ name = "[Exemple] Hello, world!"
 script = "echo Hello, world!"
 
 [[entries]]
+name = "[Exemple] Hello (Powershell)"
+shell = "Powershell"
+script = """
+Write-Host 'Hello' $args[0]
+"""
+args = ["Name"]
+
+
+[[entries]]
 name = "[Exemple] Echo argument"
 only_on = "Linux"
 script = "echo $1"
@@ -43,7 +52,6 @@ iforgor source list \
 echo
 echo 🛑 Sources deleted, you should restart iforgor to see up-to-date commands list
 """
-
 
 [[entries]]
 name = "[Rust] Cargo check (debug)"

@@ -276,7 +276,11 @@ impl Registry {
         history.history.push(id.clone());
 
         let UserCommand {
-            name, script, args, ..
+            name,
+            script,
+            args,
+            shell,
+            ..
         } = entry;
 
         let mut args_values = Vec::new();
@@ -291,13 +295,13 @@ impl Registry {
             print!("- {arg}: ");
             std::io::stdout().flush()?;
             std::io::stdin().read_line(&mut buf)?;
-            args_values.push(buf);
+            args_values.push(buf.trim().to_string());
         }
 
-        println!("💭 Running \"{name}\"\n");
+        println!("💭 Running \"{name}\" with shell \"{shell:?}\"\n");
 
         ctrlc_handler::set_mode(ctrlc_handler::Mode::Ignore);
-        let status = execute_script(script, &args_values)?;
+        let status = execute_script(script, &args_values, *shell)?;
         ctrlc_handler::set_mode(ctrlc_handler::Mode::Kill);
 
         Ok(status)
@@ -323,6 +327,30 @@ pub struct UserCommand {
     #[serde(default)]
     pub args: Vec<String>,
     pub only_on: Option<Platform>,
+    #[serde(default)]
+    pub shell: Shell,
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub enum Shell {
+    #[serde(alias = "sh")]
+    Sh,
+    #[serde(alias = "cmd")]
+    Cmd,
+    #[serde(alias = "powershell")]
+    Powershell,
+}
+
+impl Default for Shell {
+    #[cfg(target_os = "linux")]
+    fn default() -> Self {
+        Self::Sh
+    }
+
+    #[cfg(target_os = "windows")]
+    fn default() -> Self {
+        Self::Cmd
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -340,16 +368,25 @@ impl UserCommand {
     }
 }
 
-#[cfg(target_os = "linux")]
-pub fn execute_script(script: &str, args: &[String]) -> anyhow::Result<process::ExitStatus> {
-    use std::os::unix::fs::PermissionsExt;
+pub fn execute_script(
+    script: &str,
+    args: &[String],
+    shell: Shell,
+) -> anyhow::Result<process::ExitStatus> {
+    match shell {
+        Shell::Sh => execute_script_sh(script, args),
+        Shell::Cmd => execute_script_cmd(script, args),
+        Shell::Powershell => execute_script_powershell(script, args),
+    }
+}
 
+pub fn execute_script_sh(script: &str, args: &[String]) -> anyhow::Result<process::ExitStatus> {
     // Create a temporary folder in which the script file will be
     // created.
     let tmp_dir = tempfile::tempdir()?;
     let file_path = tmp_dir.path().join("script");
 
-    // Create the file, write into it and change its permissions.
+    // Create the file, write into it and change its permissions (on Linux).
     // File is closed at the end of scope, which will allow to
     // execute it after.
     {
@@ -358,11 +395,14 @@ pub fn execute_script(script: &str, args: &[String]) -> anyhow::Result<process::
         tmp_file.write_all(script.as_bytes())?;
         tmp_file.flush()?;
 
-        // Set permissions to read/execute.
-
-        let mut permissions = tmp_file.metadata()?.permissions();
-        permissions.set_mode(0o500);
-        tmp_file.set_permissions(permissions)?;
+        #[cfg(target_os = "linux")]
+        {
+            // Set permissions to read/execute.
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = tmp_file.metadata()?.permissions();
+            permissions.set_mode(0o500);
+            tmp_file.set_permissions(permissions)?;
+        }
     }
 
     // Execute the script
@@ -378,14 +418,13 @@ pub fn execute_script(script: &str, args: &[String]) -> anyhow::Result<process::
     Ok(status)
 }
 
-#[cfg(target_os = "windows")]
-pub fn execute_script(script: &str, args: &[String]) -> anyhow::Result<process::ExitStatus> {
+pub fn execute_script_cmd(script: &str, args: &[String]) -> anyhow::Result<process::ExitStatus> {
     // Create a temporary folder in which the script file will be
     // created.
     let tmp_dir = tempfile::tempdir()?;
     let file_path = tmp_dir.path().join("script.bat");
 
-    // Create the file, write into it and change its permissions.
+    // Create the file and write into it.
     // File is closed at the end of scope, which will allow to
     // execute it after.
     {
@@ -397,6 +436,57 @@ pub fn execute_script(script: &str, args: &[String]) -> anyhow::Result<process::
 
     // Execute the script
     let mut child = process::Command::new(file_path)
+        .args(args)
+        .spawn()
+        .expect("script command failed to start");
+
+    let status = child.wait()?;
+
+    tmp_dir.close()?;
+
+    Ok(status)
+}
+
+pub fn execute_script_powershell(
+    script: &str,
+    args: &[String],
+) -> anyhow::Result<process::ExitStatus> {
+    // Create a temporary folder in which the script file will be
+    // created.
+    let tmp_dir = tempfile::tempdir()?;
+    let file_path = tmp_dir.path().join("script.ps1");
+
+    // Create the file and write into it.
+    // File is closed at the end of scope, which will allow to
+    // execute it after.
+    {
+        let mut tmp_file = File::create(&file_path)?;
+        tmp_file.write_all(script.as_bytes())?;
+        tmp_file.flush()?;
+    }
+
+    let powershell_cmd: Vec<_> = [
+        "&".to_string(),
+        format!("{}", file_path.display()),
+    ]
+    .into_iter()
+    .chain(args.iter().map(|arg| snailquote::escape(arg).into_owned()))
+    .collect();
+
+    let powershell_cmd = powershell_cmd.join(" ");
+
+    let args = [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        &powershell_cmd,
+    ];
+
+    println!("{args:?}");
+
+    // Execute the script
+    let mut child = process::Command::new("PowerShell")
         .args(args)
         .spawn()
         .expect("script command failed to start");
