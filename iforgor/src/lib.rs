@@ -88,7 +88,7 @@ impl Cli {
         }
 
         let mut registry = OnDisk::<Registry>::open_or_default(registry_path)?;
-        let mut history = OnDisk::<History>::open_or_default(history_path)?;
+        let mut history = OnDisk::<History>::open_or_default(history_path.clone())?;
 
         let Some(command) = self.command else {
             loop {
@@ -145,8 +145,7 @@ impl Cli {
 
                 let choice = &choices[0];
 
-                let status = registry.run_script_by_id(choice, &mut history)?;
-                history.save()?;
+                let status = registry.run_script_by_id(choice)?;
 
                 match status.code() {
                     Some(code) => {
@@ -165,6 +164,11 @@ impl Cli {
                 ctrlc_handler::set_mode(ctrlc_handler::Mode::Kill);
 
                 println!("━━━━━━━━━━━━━━━");
+
+                // Reload history from disk in case multiple `iforgor` are running.
+                history = OnDisk::<History>::open(history_path.clone()).unwrap_or(history);
+                history.add_entry(choice);
+                history.save()?;
             }
 
             return Ok(());
@@ -253,6 +257,16 @@ pub struct History {
     pub history: Vec<CommandId>,
 }
 
+impl History {
+    pub fn add_entry(&mut self, id: &CommandId) {
+        let mut alt = Vec::new();
+        std::mem::swap(&mut alt, &mut self.history);
+
+        self.history = alt.into_iter().filter(|hid| hid != id).collect();
+        self.history.push(id.clone());
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Registry {
     pub sources: BTreeSet<PathBuf>,
@@ -260,20 +274,10 @@ pub struct Registry {
 }
 
 impl Registry {
-    pub fn run_script_by_id(
-        &mut self,
-        id: &CommandId,
-        history: &mut History,
-    ) -> anyhow::Result<process::ExitStatus> {
+    pub fn run_script_by_id(&mut self, id: &CommandId) -> anyhow::Result<process::ExitStatus> {
         let Some(entry) = self.commands.get(id) else {
             bail!("Unknown command ID {id}")
         };
-
-        let mut alt = Vec::new();
-        std::mem::swap(&mut alt, &mut history.history);
-
-        history.history = alt.into_iter().filter(|hid| hid != id).collect();
-        history.history.push(id.clone());
 
         let UserCommand {
             name,

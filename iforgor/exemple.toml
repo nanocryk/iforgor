@@ -84,3 +84,7 @@ script = "cargo doc"
 [[entries]]
 name = "[Rust] Cargo doc (+ open in browser)"
 script = "cargo doc --open"
+
+[[entries]]
+name = "[Rust] Cargo test"
+script = "cargo test"

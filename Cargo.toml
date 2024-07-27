@@ -7,7 +7,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-ichoose = { version = "0.2.0", path = "ichoose" }
+ichoose = { version = "0.2.1", path = "ichoose" }
 
 anyhow = "1.0.86"
 base16ct = { version = "0.2.0", features = [ "alloc" ] }
