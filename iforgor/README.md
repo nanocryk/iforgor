@@ -24,6 +24,8 @@ Entry can also contain the following optional fields:
 - `args = ["Arg 1", "Arg 2"]`: list arguments labels that will be printed when calling.
 - `shell = "SHELL`: selects the shell to execute the script with. Supports `Sh` (default for Linux),
   `Cmd` (default for Windows) and `Powershell`.
+- `only_in_dir`: entry only appears if the current directory path matches the provided UNIX glob pattern.
+- `risky`: if true it marks the command as risky, and will ask confirmation (which defaults to false if an empty answer is provided). Avoids running dangerous scripts by mistake. 
 
 After modifying a source file `iforgor reload` should be called to update its internal list.
 

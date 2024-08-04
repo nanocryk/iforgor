@@ -23,8 +23,14 @@ only_on = "Linux"
 script = "sudo apt update && sudo apt upgrade"
 
 [[entries]]
+name = "Risky script test"
+risky = true
+script = "echo Woah that was risky!"
+
+[[entries]]
 name = "Force kill processes with interactive selection"
 only_on = "Linux"
+risky = true
 script = """
 ps -x -o 'pid,pcpu,cmd' \
 | tail -n +2 \

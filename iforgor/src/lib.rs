@@ -11,7 +11,7 @@ use {
         collections::{BTreeMap, BTreeSet},
         fs::File,
         io::Write,
-        path::PathBuf,
+        path::{Path, PathBuf},
         process::{self},
     },
 };
@@ -92,9 +92,13 @@ impl Cli {
 
         let Some(command) = self.command else {
             loop {
+                let current_dir =
+                    std::env::current_dir().expect("to be able to fetch current dir path");
+
                 let commands: Vec<_> = registry
                     .commands
                     .iter()
+                    .filter(|(_, command)| filter_only_in_dir(&current_dir, command))
                     .map(|(id, command)| ichoose::ListEntry {
                         key: id.clone(),
                         name: command.name.to_string(),
@@ -105,6 +109,7 @@ impl Cli {
                     .history
                     .iter()
                     .filter_map(|id| registry.commands.get(id).map(|c| (id, c)))
+                    .filter(|(_, command)| filter_only_in_dir(&current_dir, command))
                     .map(|(id, c)| ichoose::ListEntry {
                         key: id.clone(),
                         name: c.name.to_string(),
@@ -145,13 +150,18 @@ impl Cli {
 
                 let choice = &choices[0];
 
-                let status = registry.run_script_by_id(choice)?;
-
-                match status.code() {
-                    Some(code) => {
-                        print!("\n🏁 Execution complete with code {code}, press Enter to proceed.")
+                match registry.run_script_by_id(choice) {
+                    Err(e) => eprintln!("Encountered an error when running command: {e}"),
+                    Ok(status) => {
+                        match status.code() {
+                            Some(code) => {
+                                print!("\n🏁 Execution complete with code {code}, press Enter to proceed.")
+                            }
+                            None => print!(
+                                "\n🏁 Execution terminated by signal, press Enter to proceed."
+                            ),
+                        }
                     }
-                    None => print!("\n🏁 Execution terminated by signal, press Enter to proceed."),
                 }
 
                 std::io::stdout().flush()?;
@@ -284,8 +294,9 @@ impl Registry {
             script,
             args,
             shell,
+            risky,
             ..
-        } = entry;
+        } = dbg!(entry);
 
         let mut args_values = Vec::new();
         if !args.is_empty() {
@@ -300,6 +311,17 @@ impl Registry {
             std::io::stdout().flush()?;
             std::io::stdin().read_line(&mut buf)?;
             args_values.push(buf.trim().to_string());
+        }
+
+        if *risky {
+            print!("⚠️ Script is tagged as risky, are you sure you want to run it? [y/N]: ");
+            let mut buf = String::new();
+            std::io::stdout().flush()?;
+            std::io::stdin().read_line(&mut buf)?;
+
+            if !["y", "yes"].contains(&buf.to_lowercase().trim()) {
+                bail!("Aborted execution of risk script")
+            }
         }
 
         println!("💭 Running \"{name}\" with shell \"{shell:?}\"\n");
@@ -327,12 +349,21 @@ pub enum SystemCommand {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserCommand {
     pub name: String,
+
     pub script: String,
+
     #[serde(default)]
     pub args: Vec<String>,
+
     pub only_on: Option<Platform>,
+
     #[serde(default)]
     pub shell: Shell,
+
+    pub only_in_dir: Option<String>,
+    
+    #[serde(default)]
+    pub risky: bool,
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -499,4 +530,20 @@ pub fn execute_script_powershell(
     tmp_dir.close()?;
 
     Ok(status)
+}
+
+fn filter_only_in_dir(current_dir: &Path, command: &UserCommand) -> bool {
+    let Some(only_in_dir) = &command.only_in_dir else {
+        return true;
+    };
+
+    let pattern = match glob::Pattern::new(only_in_dir) {
+        Ok(p) => p,
+        Err(e) => panic!(
+            "Entry named \"{} has an error in its `only_in_dir` field: {}\"",
+            command.name, e
+        ),
+    };
+
+    pattern.matches_path(&current_dir)
 }
