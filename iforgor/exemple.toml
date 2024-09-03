@@ -1,10 +1,12 @@
 [[entries]]
 name = "[Exemple] Hello, world!"
+only_in_dir = "**/iforgor"
 script = "echo Hello, world!"
 
 [[entries]]
 name = "[Exemple] Hello (Powershell)"
 shell = "Powershell"
+only_in_dir = "**/iforgor"
 script = """
 Write-Host 'Hello' $args[0]
 """
@@ -14,6 +16,7 @@ args = ["Name"]
 [[entries]]
 name = "[Exemple] Echo argument"
 only_on = "Linux"
+only_in_dir = "**/iforgor"
 script = "echo $1"
 args = ["Text to print"]
 
@@ -24,6 +27,7 @@ script = "sudo apt update && sudo apt upgrade"
 
 [[entries]]
 name = "Risky script test"
+only_in_dir = "**/iforgor"
 risky = true
 script = "echo Woah that was risky!"
 

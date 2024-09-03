@@ -296,7 +296,7 @@ impl Registry {
             shell,
             risky,
             ..
-        } = dbg!(entry);
+        } = entry;
 
         let mut args_values = Vec::new();
         if !args.is_empty() {

@@ -1,6 +1,6 @@
 [package]
 name = "iforgor"
-version = "0.2.3"
+version = "0.2.4"
 authors = [ "nanocryk" ]
 description = "The CLI tool for all those commands you forget about"
 edition = { workspace = true }
