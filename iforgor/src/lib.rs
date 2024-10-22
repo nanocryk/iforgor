@@ -87,7 +87,7 @@ impl Cli {
             return Ok(());
         }
 
-        let mut registry = OnDisk::<Registry>::open_or_default(registry_path)?;
+        let mut registry = OnDisk::<Registry>::open_or_default(registry_path.clone())?;
         let mut history = OnDisk::<History>::open_or_default(history_path.clone())?;
 
         let Some(command) = self.command else {
@@ -175,10 +175,24 @@ impl Cli {
 
                 println!("━━━━━━━━━━━━━━━");
 
-                // Reload history from disk in case multiple `iforgor` are running.
+                // We can take it since we'll reload the registry from file
+                let mut modified_command = registry.commands.remove(choice);
+
+                // Reload files from disk in case multiple `iforgor` are running.
                 history = OnDisk::<History>::open(history_path.clone()).unwrap_or(history);
                 history.add_entry(choice);
                 history.save()?;
+
+                registry = OnDisk::open(registry_path.clone()).unwrap_or(registry);
+
+                // update last command default args
+                if let Some(in_file_command) = registry.commands.get_mut(choice) {
+                    if let Some(modified_command) = modified_command.take() {     
+                        in_file_command.args_default = modified_command.args_default;
+                    }
+                }
+                
+                registry.save()?;
             }
 
             return Ok(());
@@ -285,7 +299,7 @@ pub struct Registry {
 
 impl Registry {
     pub fn run_script_by_id(&mut self, id: &CommandId) -> anyhow::Result<process::ExitStatus> {
-        let Some(entry) = self.commands.get(id) else {
+        let Some(entry) = self.commands.get_mut(id) else {
             bail!("Unknown command ID {id}")
         };
 
@@ -293,6 +307,7 @@ impl Registry {
             name,
             script,
             args,
+            args_default,
             shell,
             risky,
             ..
@@ -301,15 +316,30 @@ impl Registry {
         let mut args_values = Vec::new();
         if !args.is_empty() {
             println!(
-                "This script requires the following arguments (use Ctrl+C to abort execution):"
-            )
+"Default values or previously used values will be suggested, type nothing \
+and press Enter to use it, or type anything (even a space) to discard it.
+
+This script requires the following arguments (use Ctrl+C to abort execution):\n"
+            );            
         }
 
-        for arg in args {
+        for (i, arg) in args.iter().enumerate() {
+
             let mut buf = String::new();
-            print!("- {arg}: ");
-            std::io::stdout().flush()?;
-            std::io::stdin().read_line(&mut buf)?;
+            
+            if let Some(def) = args_default.get(i).filter(|def| !def.trim().is_empty()) {
+                println!("- {arg} [Default: {def}]:");
+                std::io::stdin().read_line(&mut buf)?;
+                if buf.trim_end_matches(|c| c == '\n' || c == '\r').is_empty() {
+                    println!("Using default!");
+                    buf = def.clone();
+                }
+            } else {
+                print!("- {arg}: ");
+                std::io::stdout().flush()?;
+                std::io::stdin().read_line(&mut buf)?;
+            }
+
             args_values.push(buf.trim().to_string());
         }
 
@@ -320,7 +350,7 @@ impl Registry {
             std::io::stdin().read_line(&mut buf)?;
 
             if !["y", "yes"].contains(&buf.to_lowercase().trim()) {
-                bail!("Aborted execution of risk script")
+                bail!("Aborted execution of risky script")
             }
         }
 
@@ -329,6 +359,9 @@ impl Registry {
         ctrlc_handler::set_mode(ctrlc_handler::Mode::Ignore);
         let status = execute_script(script, &args_values, *shell)?;
         ctrlc_handler::set_mode(ctrlc_handler::Mode::Kill);
+
+        // Set used values as new default.
+        *args_default = args_values;
 
         Ok(status)
     }
@@ -352,16 +385,21 @@ pub struct UserCommand {
 
     pub script: String,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub args: Vec<String>,
 
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args_default: Vec<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub only_on: Option<Platform>,
 
     #[serde(default)]
     pub shell: Shell,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub only_in_dir: Option<String>,
-    
+
     #[serde(default)]
     pub risky: bool,
 }

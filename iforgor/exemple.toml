@@ -12,13 +12,21 @@ Write-Host 'Hello' $args[0]
 """
 args = ["Name"]
 
-
 [[entries]]
 name = "[Exemple] Echo argument"
 only_on = "Linux"
 only_in_dir = "**/iforgor"
 script = "echo $1"
 args = ["Text to print"]
+args_default = ["Hello world"]
+
+[[entries]]
+name = "[Exemple] Echo env"
+only_in_dir = "**/iforgor"
+script = """
+EXEMPLE_ENV="Hello world"
+echo $EXEMPLE_ENV
+"""
 
 [[entries]]
 name = "[APT] Update packages"
@@ -47,8 +55,12 @@ ps -x -o 'pid,pcpu,cmd' \
 name = "[iforgor] Reload sources"
 script = """
 iforgor reload
-echo
-echo 🛑 Sources reloaded, you should restart iforgor to see up-to-date commands list
+"""
+
+[[entries]]
+name = "[iforgor] Display sources list"
+script = """
+iforgor source list
 """
 
 [[entries]]
@@ -59,8 +71,6 @@ iforgor source list \
 | while read x ; do echo "$x @ $x" ; done \
 | ichoose --multi --title "Select sources to delete" \
 | while read x ; do iforgor source remove $x ; done
-echo
-echo 🛑 Sources deleted, you should restart iforgor to see up-to-date commands list
 """
 
 [[entries]]
